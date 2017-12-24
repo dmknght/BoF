@@ -18,22 +18,21 @@ def verbose(length, payload, _msg):
 
 def _error_code_unknown(_err_code, _msg, payload, length):
 	print '''
-	Segmentation fault
 	Exit_code: {},
 	Stdout: {},
 	Payload length: {},
 	Buf size: {}
 	Exit!
-	'''.format(_err_code,'\n'.join( _msg), len(payload), length)
+	'''.format(_err_code, _msg[-1], len(payload), length)
 
 def _diff_stdout(first_msg, _msg, payload, length):
-			print '''
-			Recv different output
-			First stdout: {},
-			Stdout: {},
-			Payload length: {},
-			Buf size: {}
-			'''.format(first_msg, _msg[-1], len(payload), length)
+	print '''
+	Recv different output
+	First stdout: [ {} ],
+	Current stdout: [ {} ],
+	Payload length: {},
+	Buf size: {}
+	'''.format(first_msg, _msg[-1], len(payload), length)
 
 def _output(filename, payload):
 	_fuzz = process(filename)
@@ -65,7 +64,8 @@ def fuzz_input(filename):
 			_last_msg = _msg[-1]
 		except:
 			_last_msg = _msg
-		if _err_code != 0 or _err_code != 1:
+
+		if _err_code != 0 and _err_code != 1:
 			_error_code_unknown(_err_code, _msg, payload, length)
 			break
 		elif _last_msg != first_msg:
@@ -98,7 +98,7 @@ def fuzz_argv(filename):
 			_last_msg = _msg[-1]
 		except:
 			_last_msg = _msg
-		if _err_code == -11:
+		if _err_code != 0 and _err_code != 1:
 			_error_code_unknown(_err_code, _msg, payload, length)
 			break
 		elif _last_msg != first_msg:
@@ -117,21 +117,20 @@ def fuzz_argv(filename):
 		else:
 			pass
 
-def main():
-	if len(sys.argv) != 3:
-		help()
-	else:
-		try:
-			filepath = sys.argv[1]
-			method = sys.argv[2]
-			if method == "input":
-				fuzz_input(filepath)
-			elif method == "argv":
-				fuzz_argv(filepath)
-			else:
-				print "Unknown method"
-		except KeyboardInterrupt:
-			print "Bye"
-			sys.exit()
+if len(sys.argv) != 3:
+	help()
+else:
+	try:
+		filepath = sys.argv[1]
+		method = sys.argv[2]
+		if method == "input":
+			fuzz_input(filepath)
+		elif method == "argv":
+			fuzz_argv(filepath)
+		else:
+			print "Unknown method"
+	except KeyboardInterrupt:
+		print "Bye"
+		sys.exit()
 
-main()
+
