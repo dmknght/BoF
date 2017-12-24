@@ -17,22 +17,31 @@ def verbose(length, payload, _msg):
 		time.sleep(0.6)
 
 def _error_code_unknown(_err_code, _msg, payload, length):
+	try:
+		_last_msg = _msg[-1]
+	except:
+		_last_msg = '\n'.join(_msg)
+
 	print '''
 	Exit_code: {},
-	Stdout: {},
+	Stdout: [ {} ],
 	Payload length: {},
 	Buf size: {}
 	Exit!
-	'''.format(_err_code, _msg[-1], len(payload), length)
+	'''.format(_err_code, _last_msg, len(payload), length)
 
 def _diff_stdout(first_msg, _msg, payload, length):
+	try:
+		last_msg = _msg[-1]
+	except:
+		last_msg = _msg
 	print '''
 	Recv different output
 	First stdout: [ {} ],
 	Current stdout: [ {} ],
 	Payload length: {},
 	Buf size: {}
-	'''.format(first_msg, _msg[-1], len(payload), length)
+	'''.format(first_msg, last_msg, len(payload), length)
 
 def _output(filename, payload):
 	_fuzz = process(filename)
