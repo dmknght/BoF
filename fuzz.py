@@ -1,145 +1,83 @@
-import sys, time
+import sys, itertools
 from pwn import *
 context.log_level = "error"
 
-def help():
-	print '''
-	Usage:
-		{} filename <input / argv>
-'''
+#Todo get $eip / $rip
 
-def verbose(length, payload, _msg):
-		print '''
-		Length: {},
-		Payload: {},
-		Output: {},
-		'''.format(length, payload, _msg)
-		time.sleep(0.6)
+def printHelpBanner():
+	print('''Usage:
+	%s <Target file> <Input type>
 
-def _error_code_unknown(_err_code, _msg, payload, length):
-	try:
-		_last_msg = _msg[-1]
-	except:
-		_last_msg = '\n'.join(_msg)
+Target file is an executable file
+Input type must be argv or input''' % sys.argv[0])
 
-	print '''
-	Exit_code: {},
-	Stdout: [ {} ],
-	Payload length: {},
-	Buf size: {}
-	Exit!
-	'''.format(_err_code, _last_msg, len(payload), length)
+def printCrashedOutput(txtErrCode, txtLastMsg, txtPayload, txtPayloadLength):
+	print('''
+		Exit code: %s,
+		Stdout: [ %s ],
+		Payload Length: %s,
 
-def _diff_stdout(first_msg, _msg, payload, length):
-	try:
-		last_msg = _msg[-1]
-	except:
-		last_msg = _msg
-	print '''
-	Recv different output
-	First stdout: [ {} ],
-	Current stdout: [ {} ],
-	Payload length: {},
-	Buf size: {}
-	'''.format(first_msg, last_msg, len(payload), length)
+Payload: %s
+		''' %(txtErrCode, txtLastMsg, txtPayloadLength, txtPayload))
 
-def _output(filename, payload):
-	_fuzz = process(filename)
-	_fuzz.sendline(payload)
-	_fuzz.shutdown()
-	_tmp = _fuzz.recvall().split('\n')
-	_err_code = _fuzz.poll()
-	return ' '.join(_tmp).split(), _err_code
+def getPatternLength(txtPayload, txtRegisterValue):
+	txtBuf, txtRegisterValue, _ = txtPayload.partition(txtRegisterValue)
+	sizeBuf = len(txtBuf)
+	return sizeBuf
+	#TODO better pattern size
 
-def argv_output(filename, payload):
-	#edit here for each time try new 
-	_fuzz = process([filename, payload])
-	_fuzz.shutdown()
-	_tmp = _fuzz.recvall().split('\n')
-	_err_code = _fuzz.poll()
-	return ' '.join(_tmp).split(), _err_code
-
-def fuzz_input(filename):
-	first_msg, _err_code = _output(filename, 'a40Jg8az')
-	try:
-		first_msg = first_msg[-1]
-	except:
-		pass
-
-	for length in range(0, 2048):
-		payload = 'a' * length + 'a'
-		_msg, _err_code = _output(filename, payload)
-		try:
-			_last_msg = _msg[-1]
-		except:
-			_last_msg = _msg
-
-		if _err_code != 0 and _err_code != 1:
-			_error_code_unknown(_err_code, _msg, payload, length)
+def generatePayload(payloadLength):
+	retPayloadText = ''
+	count = 0
+	for objGenPatter in itertools.product(['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'], ['A', 'B', 'C', 'D', 'E', 'F'], ['A', 'B', 'C', 'D', 'E', 'F']):
+		retPayloadText += ''.join(objGenPatter)
+		if count >= payloadLength / 4:
 			break
-		elif _last_msg != first_msg:
-			_diff_stdout(first_msg, _msg, payload, length)
-			_choose = raw_input('[C]ontinue / [S]how full stdout ').replace('\n', '')
-			if (_choose == 'c') or (_choose == 'C'):
-				first_msg = _msg[-1]
-				pass
-			elif (_choose == 's') or (_choose == 'S'):
-				print '\n'.join(_msg)
-				raw_input('[Enter] to continue or [Ctrl] + [C] to quit')
-				first_msg = _last_msg
-			else:
-				print "Invalid option, exit"
-				break
-		else:
-			pass
+		count += 1
+	return retPayloadText[:payloadLength]
 
+def fuzzDump(txtFileFuzz, txtPayload, txtInputType):
+	# objFileFuzz: full file path to executable file
+	# objPayload: payload after generating
+	# objInputType: input way: argv / input
+	if txtInputType == 'argv':
+		#edit here if need other param
+		objFuzzProcess = process([txtFileFuzz, txtPayload])
+	else:
+		objFuzzProcess = process(txtFileFuzz)
+		# Edit here if need other input
+		objFuzzProcess.sendline(txtPayload)
+	objFuzzProcess.shutdown()
+	txtFuzzMsg = objFuzzProcess.recvall().split('\n')
+	txtFuzzErrCode = objFuzzProcess.poll()
+	return ' '.join(txtFuzzMsg).split('\n'), txtFuzzErrCode
 
-def fuzz_argv(filename):
-	first_msg, error_code = argv_output(filename, 'aos&79A')
-	try:
-		first_msg = first_msg[-1]
-	except:
-		pass
-	for length in range(0, 2048):
-		payload = 'a' * length + 'a'
-		_msg, _err_code = argv_output(filename, payload)
-		try:
-			_last_msg = _msg[-1]
-		except:
-			_last_msg = _msg
-		if _err_code != 0 and _err_code != 1:
-			_error_code_unknown(_err_code, _msg, payload, length)
+def handlerFuzzRequest(txtTargetName, txtInputType):
+	for varPayloadLength in range(1, 14400):
+		txtFuzzPayload = generatePayload(varPayloadLength)
+		txtLastMsg, txtErrCode = fuzzDump(txtTargetName, txtFuzzPayload, txtInputType)
+		if txtErrCode != 1 and txtErrCode != 0:
+			# Todo: Better interrupt program
+			printCrashedOutput(txtErrCode, txtLastMsg, txtFuzzPayload, varPayloadLength)
 			break
-		elif _last_msg != first_msg:
-			_diff_stdout(first_msg, _msg, payload, length)
-			_choose = raw_input('[C]ontinue / [S]how full stdout ').replace('\n', '')
-			if (_choose == 'c') or (_choose == 'C'):
-				first_msg = _msg[-1]
-				pass
-			elif (_choose == 's') or (_choose == 'S'):
-				print '\n'.join(_msg)
-				raw_input('[Enter] to continue or [Ctrl] + [C] to quit')
-				first_msg = _last_msg
+	# Get $eip / $rip
+	# Get offset
+
+def main():
+	if len(sys.argv) != 3:
+		printHelpBanner()
+	else:
+		try:
+			optTargetPath = sys.argv[1]
+			optFuzzMethod = sys.argv[2]
+			if optFuzzMethod not in ['input', 'argv']:
+				print("Unknow method. Must be [ argv / input ]")
 			else:
-				print "Invalid option, exit"
-				break
-		else:
-			pass
+				handlerFuzzRequest(optTargetPath, optFuzzMethod)
+		except KeyboardInterrupt:
+			print("Stop by user")
+			sys.exit()
+		except:
+			print("Unknow error")
 
-if len(sys.argv) != 3:
-	help()
-else:
-	try:
-		filepath = sys.argv[1]
-		method = sys.argv[2]
-		if method == "input":
-			fuzz_input(filepath)
-		elif method == "argv":
-			fuzz_argv(filepath)
-		else:
-			print "Unknown method"
-	except KeyboardInterrupt:
-		print "Bye"
-		sys.exit()
-
-
+main()
